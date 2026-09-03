@@ -15,7 +15,7 @@ EngineVar[] engineVars;
 EngineLayout engineLayout;
 
 void setup() {
-  size(400, 340);
+  size(480, 560);
 
   // Imprime puertos disponibles en la consola
   printArray(Serial.list());
@@ -28,36 +28,76 @@ void setup() {
   setupEngineVars();
 }
 
-// Define los 3 bloques de estado y sus límites (Perfect, Good, Mid, Bad, Terrible)
-// calibrados según el rango que ya usa la simulación de cada variable.
+// Define las 3 variables monitoreadas: sus límites de estado (Perfect, Good, Mid,
+// Bad, Terrible), el rango visual de su barra de nivel, su unidad y su ícono.
 void setupEngineVars() {
   EngineVar vibrationVar = new EngineVar("Vibración");
   vibrationVar.setStatesLimits(2, 4, 6, 8, 10);
+  vibrationVar.setRange(0, 10);
+  vibrationVar.setUnit("mm/s");
+  vibrationVar.setIcon("vibration");
 
   EngineVar temperatureVar = new EngineVar("Temperatura");
   temperatureVar.setStatesLimits(32, 44, 56, 68, 80);
+  temperatureVar.setRange(20, 80);
+  temperatureVar.setUnit("°C");
+  temperatureVar.setIcon("temperature");
 
   EngineVar voltageVar = new EngineVar("Voltaje");
   voltageVar.setStatesLimits(150, 180, 200, 220, 240);
+  voltageVar.setRange(110, 240);
+  voltageVar.setUnit("V");
+  voltageVar.setIcon("voltage");
 
   engineVars = new EngineVar[]{vibrationVar, temperatureVar, voltageVar};
 
-  engineLayout = new EngineLayout(20, 40, 200, 220);
+  engineLayout = new EngineLayout(24, 130, 456, 520);
   engineLayout.setInfoBlocksAmount(engineVars.length);
 }
 
 void draw() {
     if (simulating) updateSimulation();
-
-    background(30);
-    fill(255);
-    text("Estado del motor", 20, 25);
-
     updateEngineVars();
+
+    drawBackground();
+    drawHeader();
+
+    engineLayout.drawSummary(engineVars, 24, 90, 432, 28);
     engineLayout.drawInfoBlocks(engineVars);
 
-    fill(255);
-    text("[ESPACIO] pausar/reanudar simulación", 20, 300);
+    drawFooter();
+}
+
+// Fondo con un leve degradado vertical para que no se vea plano
+void drawBackground() {
+    color top = color(22, 24, 32);
+    color bottom = color(32, 35, 46);
+    for (int y = 0; y < height; y++) {
+        stroke(lerpColor(top, bottom, y / (float) height));
+        line(0, y, width, y);
+    }
+}
+
+void drawHeader() {
+    noStroke();
+    textAlign(LEFT, TOP);
+
+    fill(235);
+    textSize(22);
+    text("Monitor de Motor", 24, 24);
+
+    fill(150, 155, 170);
+    textSize(13);
+    text("Panel de estado en tiempo real", 24, 52);
+}
+
+void drawFooter() {
+    noStroke();
+    fill(120, 124, 138);
+    textAlign(LEFT, TOP);
+    textSize(12);
+    String estadoSim = simulating ? "activa" : "en pausa";
+    text("Simulación " + estadoSim + " — [ESPACIO] pausar/reanudar", 24, height - 26);
 }
 
 // Copia los valores simulados/reales hacia los EngineVar y recalcula su estado
@@ -67,14 +107,12 @@ void updateEngineVars() {
     engineVars[2].setVarAndCalculateState(voltage);
 }
 
-
-
 // SIMULACIÓN: hace oscilar las 3 variables entre un mínimo y un máximo
 // siguiendo una onda triangular (sube en línea recta, luego baja en línea recta).
 void updateSimulation() {
-    vibration = triangularSine(millis(), VIBRATION_PERIOD,   0, 10);
+    vibration   = triangularSine(millis(), VIBRATION_PERIOD,   0, 10);
     temperature = triangularSine(millis(), TEMPERATURE_PERIOD, 20, 80);
-    voltage = triangularSine(millis(), VOLTAGE_PERIOD,     110, 240);
+    voltage     = triangularSine(millis(), VOLTAGE_PERIOD,     110, 240);
 }
 
 // Devuelve un valor entre minVal y maxVal que sube y baja linealmente
@@ -91,11 +129,10 @@ void serialEvent(Serial p) {
     if (line != null) {
         String[] info = split(trim(line), ',');
         if (info.length == 3) {
-            vibration = float(info[0]);
+            vibration   = float(info[0]);
             temperature = float(info[1]);
-            voltage = float(info[2]);
+            voltage     = float(info[2]);
         }
-
     }
 }
 
