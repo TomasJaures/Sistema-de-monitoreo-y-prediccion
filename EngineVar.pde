@@ -1,11 +1,17 @@
 class EngineVar {
 
     // Textos de estado, en el mismo orden que statesLimits: Perfect -> Good -> Mid -> Bad -> Terrible
-    private final String[] stateLabels = {"ÓPTIMO", "BUENO", "REGULAR", "ALERTA", "CRÍTICO"};
+    private final String[] stateLabels = {
+        "ÓPTIMO",
+        "BUENO",
+        "REGULAR",
+        "ALERTA",
+        "CRÍTICO"
+    };
 
     private String name;
     private String unit;
-    private String icon; // "vibration", "temperature" o "voltage" (ver EngineLayout.drawIcon)
+    private String icon; 
     private float var;
     private float minRange, maxRange; // rango visual usado por la barra de nivel
 
@@ -17,35 +23,23 @@ class EngineVar {
         this.name = name;
     }
 
-    //Once
     void setStatesLimits(float perfect, float good, float mid, float bad, float terrible){
-        this.statesLimits = new float[]{perfect, good, mid, bad, terrible};
+        //Determina en que rangos la unidad de medida se encuentra en estado: Perfecto, bueno, etc.
+        this.statesLimits = new float[]{
+            perfect,
+            good,
+            mid,
+            bad,
+            terrible
+        };
     }
 
-    //Once
     void setRange(float minRange, float maxRange){
+
+        //Si supera uno de los limites no pasara nada visualmente.
+
         this.minRange = minRange;
         this.maxRange = maxRange;
-    }
-
-    //Once
-    void setUnit(String unit){
-        this.unit = unit;
-    }
-
-    //Once
-    void setIcon(String icon){
-        this.icon = icon;
-    }
-
-    //Once
-    void setName(String name){
-        this.name = name;
-    }
-
-    //Repeated
-    void setVar(float var){
-        this.var = var;
     }
 
     void setVarAndCalculateState(float var){
@@ -60,8 +54,25 @@ class EngineVar {
                 return;
             }
         }
-        state = statesLimits.length - 1; // por encima del último límite -> mismo estado "crítico"
+        state = statesLimits.length - 1; // Si llega acá es estado critico
     }
+    
+    float getIntensity(){
+
+        //Metodo util para dibujar `EngineImage.pde`, sirve para que los cambios NO sean lineales, en cambio, se basan en los rangos dictados por `setStatesLimits();`
+
+        int lastState = statesLimits.length - 1;
+        float lower = (state == 0) ? minRange : statesLimits[state - 1];
+        float upper = (state == lastState) ? maxRange : statesLimits[state];
+        if (upper <= lower) return constrain((float) state / lastState, 0, 1);
+
+        float within = constrain(map(var, lower, upper, 0, 1), 0, 1);
+        return constrain((state + within) / lastState, 0, 1);
+    }
+
+    /**=================================
+            GETTERS Y SETTERS
+    ===================================**/
 
     int getState(){
         return this.state;
@@ -101,5 +112,21 @@ class EngineVar {
 
     float[] getStatesLimits(){
         return this.statesLimits;
+    }
+
+    void setUnit(String unit){
+        this.unit = unit;
+    }
+
+    void setVar(float var){
+        this.var = var;
+    }
+
+    void setIcon(String icon){
+        this.icon = icon;
+    }
+
+    void setName(String name){
+        this.name = name;
     }
 }
