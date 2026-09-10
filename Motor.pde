@@ -16,9 +16,16 @@ final int BAUD_RATE = 115200; // debe coincidir con Serial.begin(...) del .ino
 
 // El Arduino (s3_V2.ino) no mide vibración/voltaje directamente: manda datos crudos
 // (aceleración en g, temperatura IR, milivolts del sensor de voltaje) y acá se
-// convierten a las unidades del panel. Calibrar contra un instrumento de referencia.
-final float VIBRATION_SCALE = 50; // desviación de 1g -> mm/s (aproximado, falta calibrar)
-final float VOLTAGE_SCALE   = 1;  // V leídos por el DFR0051 -> V reales del motor (depende del sensor)
+// convierten a las unidades del panel, según el Manual Técnico (doc/).
+final float VIBRATION_SCALE = 50; // RMS de (|accel|-1g) -> mm/s (aproximado, falta calibrar)
+final float VOLTAGE_SCALE   = 5;  // divisor DFR0051 5:1 (manual, sección 5): Vmotor = adc_mv*5/1000
+
+// Ventana para el RMS de vibración: a ~200 Hz (delay(5) del firmware), 100 muestras
+// son ~0.5 s, el mismo período con el que el firmware refresca temperatura/voltaje.
+final int VIBRATION_WINDOW = 100;
+float[] vibrationWindow = new float[VIBRATION_WINDOW];
+int vibrationIndex = 0;
+float vibrationSumSq = 0;
 
 EngineVar[] engineVars;
 EngineLayout engineLayout;
@@ -79,17 +86,19 @@ void setupEngineVars() {
     );
     
     //Voltage
+    // Rango calibrado para el motor DC de 5V del banco de pruebas (manual, sección 1),
+    // no para una línea AC de 110-240V. Ajustar estos límites con lecturas reales.
     EngineVar voltageVar = new EngineVar("Voltaje");
-    voltageVar.setRange(110, 240);
+    voltageVar.setRange(4, 6);
     voltageVar.setUnit("V");
     voltageVar.setIcon("voltage");
 
     voltageVar.setStatesLimits(
-        150, //perfect
-        180, //good
-        200, //mid
-        220, //bad
-        240 //terrible
+        5.1, //perfect
+        5.3, //good
+        5.5, //mid
+        5.7, //bad
+        6.0  //terrible
     );
 
     engineVars = new EngineVar[]{
@@ -139,8 +148,19 @@ void serialEvent(Serial p) {
         return; // línea no numérica (p.ej. el encabezado)
     }
 
+    // a_vib = |accel| - 1g, y su RMS sobre una ventana de muestras (manual, sección 5)
+    // en vez del valor instantáneo, que es demasiado ruidoso muestra a muestra.
     float accelMagnitude = sqrt(ax * ax + ay * ay + az * az);
-    vibration   = abs(accelMagnitude - 1.0) * VIBRATION_SCALE; // desviación de 1g en reposo
+    float aVib = accelMagnitude - 1.0;
+
+    vibrationSumSq -= vibrationWindow[vibrationIndex] * vibrationWindow[vibrationIndex];
+    vibrationWindow[vibrationIndex] = aVib;
+    vibrationSumSq += aVib * aVib;
+    vibrationIndex = (vibrationIndex + 1) % VIBRATION_WINDOW;
+
+    float vibrationRms = sqrt(vibrationSumSq / VIBRATION_WINDOW);
+
+    vibration   = vibrationRms * VIBRATION_SCALE;
     temperature = tempObjeto; // temperatura del motor medida por el sensor IR (MLX90614)
     voltage     = (adcMv / 1000.0) * VOLTAGE_SCALE;
 }
@@ -203,7 +223,7 @@ void drawFooter() {
 void updateSimulation() {
     vibration = triangularSine(millis(), VIBRATION_PERIOD,   0, 10);
     temperature = triangularSine(millis(), TEMPERATURE_PERIOD, 20, 80);
-    voltage = triangularSine(millis(), VOLTAGE_PERIOD,     110, 240);
+    voltage = triangularSine(millis(), VOLTAGE_PERIOD,     4, 6);
 }
 
 float triangularSine(float timeMS, float periodMs, float minVal, float maxVal){
