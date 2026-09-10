@@ -12,6 +12,13 @@ final float TEMPERATURE_PERIOD = 16000; // 8 s subiendo + 8 s bajando
 final float VOLTAGE_PERIOD = 12000; // 6 s subiendo + 6 s bajando
 
 final int PORT_ID = 0; //port de arduino
+final int BAUD_RATE = 115200; // debe coincidir con Serial.begin(...) del .ino
+
+// El Arduino (s3_V2.ino) no mide vibración/voltaje directamente: manda datos crudos
+// (aceleración en g, temperatura IR, milivolts del sensor de voltaje) y acá se
+// convierten a las unidades del panel. Calibrar contra un instrumento de referencia.
+final float VIBRATION_SCALE = 50; // desviación de 1g -> mm/s (aproximado, falta calibrar)
+final float VOLTAGE_SCALE   = 1;  // V leídos por el DFR0051 -> V reales del motor (depende del sensor)
 
 EngineVar[] engineVars;
 EngineLayout engineLayout;
@@ -21,16 +28,22 @@ void setup() {
     size(880, 560);
 
     // Imprime ports disponibles en la consola
-    printArray(Serial.list());
+    showPorts();
 
     // Si el Arduino está conectado, descomentar la linea de abajo
     //setupArduino();
     setupEngineVars();
 }
 
+void showPorts(){
+    println("--- INICIO PUERTOS ---");
+    printArray(Serial.list());
+    println("--- FIN PUERTOS ---");
+}
+
 void setupArduino(){
     String portName = Serial.list()[PORT_ID];
-    port = new Serial(this, portName, 9600);
+    port = new Serial(this, portName, BAUD_RATE);
 }
 
 void setupEngineVars() {
@@ -95,6 +108,7 @@ void draw() {
     if (simulating) updateSimulation();
     updateEngineVars(); //Actualizar datos
 
+    
     drawBackground();
     drawHeader();
 
@@ -105,17 +119,30 @@ void draw() {
     drawFooter();
 }
 
-// Recibe datos del Arduino REAL por USB
+// Recibe datos crudos del Arduino (s3_V2.ino) por USB, en formato CSV:
+// timestamp_ms,ax,ay,az,temp_ambiente,temp_objeto,adc_mv
 void serialEvent(Serial p) {
     String line = p.readStringUntil('\n');
-    if (line != null) {
-        String[] info = split(trim(line), ',');
-        if (info.length == 3) {
-            vibration   = float(info[0]);
-            temperature = float(info[1]);
-            voltage     = float(info[2]);
-        }
+    if (line == null) return;
+
+    String[] info = split(trim(line), ',');
+    if (info.length != 7) return; // ignora el encabezado CSV u otras líneas inesperadas
+
+    float ax, ay, az, tempObjeto, adcMv;
+    try {
+        ax         = Float.parseFloat(info[1]);
+        ay         = Float.parseFloat(info[2]);
+        az         = Float.parseFloat(info[3]);
+        tempObjeto = Float.parseFloat(info[5]);
+        adcMv      = Float.parseFloat(info[6]);
+    } catch (NumberFormatException e) {
+        return; // línea no numérica (p.ej. el encabezado)
     }
+
+    float accelMagnitude = sqrt(ax * ax + ay * ay + az * az);
+    vibration   = abs(accelMagnitude - 1.0) * VIBRATION_SCALE; // desviación de 1g en reposo
+    temperature = tempObjeto; // temperatura del motor medida por el sensor IR (MLX90614)
+    voltage     = (adcMv / 1000.0) * VOLTAGE_SCALE;
 }
 
 
