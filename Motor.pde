@@ -3,7 +3,7 @@ import processing.serial.*;
 Serial port;
 float vibration, temperature, voltage;
 
-boolean simulating = true; // barra espaciadora: pausa/reanuda la simulación
+boolean simulating = false; // barra espaciadora: pausa/reanuda la simulación
 
 // Duración de un ciclo completo (subida + bajada) de cada variable, en ms.
 // Cada variable tiene un período distinto para que no oscilen en sincronía.
